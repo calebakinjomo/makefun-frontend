@@ -2,15 +2,24 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>make.fun bounties</title>
-<link rel="icon" href="icon.png">
-<link rel="stylesheet" href="s.css">
-<script type="module" src="m.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="./icon.svg" type="image/svg+xml">
+<title>make.fun — live bounties, leaderboards and makers</title>
+<link rel="stylesheet" href="./style.css">
+<script type="module" src="./boot.js"></script>
 </head>
 <body>
-<header><a class="bd" href="#/">make<b>.</b>fun</a><nav><a href="#/">Bounties</a></nav><form id="pf"><input name="h" placeholder="maker handle" aria-label="Maker handle"><button>Profile</button></form></header>
-<main id="v"></main>
-<footer>Live data from <a href="https://make.fun">make.fun</a> · read-only, no sign-in</footer>
+<header class="top">
+  <a class="brand" href="#/">make<span>.</span>fun</a>
+  <nav class="nav"><a href="#/">Bounties</a></nav>
+  <form id="lookup" class="lookup">
+    <input id="handle" type="search" placeholder="maker handle" aria-label="Maker handle" autocomplete="off" spellcheck="false">
+    <button type="submit">Profile</button>
+  </form>
+</header>
+<main id="view" aria-live="polite"></main>
+<footer class="foot">
+  <p>Live data from <a href="https://make.fun">make.fun</a>'s public API — board, bounty pages, leaderboards and maker profiles, all in one small app.</p>
+</footer>
 </body>
 </html>
