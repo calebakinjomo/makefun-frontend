@@ -1,48 +1,32 @@
-// Local dev server for the frontend: serves app/ on http://localhost:8080.
-// `node serve.ts` (or `node serve.ts --port 9000` for another port).
+// serve.ts — serves app/ on http://localhost:8080 for testing (Node stdlib
+// only). Usage: node serve.ts [--port 8080]
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { join, extname, normalize } from 'node:path';
+import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const here = fileURLToPath(new URL('.', import.meta.url));
-const root = join(here, 'app');
-
-const types = {
+const root = join(fileURLToPath(new URL('.', import.meta.url)), 'app');
+const mime = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
   '.mjs': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
   '.svg': 'image/svg+xml',
+  '.jpg': 'image/jpeg',
+  '.png': 'image/png',
 };
+const port = Number(process.argv[process.argv.indexOf('--port') + 1] || 8080);
 
-function port() {
-  const i = process.argv.indexOf('--port');
-  if (i !== -1 && process.argv[i + 1]) return Number(process.argv[i + 1]);
-  return 8080;
-}
-
-const server = createServer(async (req, res) => {
+createServer(async (req, res) => {
+  const path = normalize('/' + decodeURIComponent(new URL(req.url || '/', 'http://x').pathname)).replace(/^\/+/, '');
+  const file = join(root, path === '' ? 'index.html' : path);
+  if (!file.startsWith(root)) { res.writeHead(403); res.end(); return; }
   try {
-    const path = decodeURIComponent(new URL(req.url || '/', 'http://x').pathname);
-    const rel = normalize(path === '/' ? 'index.html' : path.replace(/^\/+/, ''));
-    if (rel.startsWith('..')) throw new Error('bad path');
-    const data = await readFile(join(root, rel));
-    res.writeHead(200, {
-      'content-type': types[extname(rel)] || 'application/octet-stream',
-      'cache-control': 'no-store',
-    });
-    res.end(data);
+    const body = await readFile(file);
+    res.writeHead(200, { 'content-type': mime[extname(file)] || 'application/octet-stream', 'cache-control': 'no-store' });
+    res.end(body);
   } catch {
-    res.writeHead(404, { 'content-type': 'text/plain' });
-    res.end('not found');
+    res.writeHead(404); res.end('not found');
   }
-});
-
-server.listen(port(), () => {
-  console.log('serving app/ on http://localhost:' + port());
-});
+}).listen(port, () => console.log('serving app/ at http://localhost:' + port));

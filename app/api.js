@@ -1,49 +1,63 @@
-// Minimal public-API client for make.fun: GET only, with an in-memory cache
-// that revalidates with ETags. The API's ETags are bound to the minute, so a
-// revalidation inside the same minute answers 304 and costs nothing.
-const API = 'https://make.fun/api';
-const FRESH_MS = 60000;
+// api.js — read-only reads of make.fun's public API, with ETag revalidation.
+// One GET per view; answers cached and revalidated with If-None-Match, so a
+// refresh inside the minute costs a 304, not a full download.
+export const API = 'https://make.fun/api';
 
-// url -> { etag, body, at }
-const store = new Map();
+// Live counters the header shows: requests sent, 304 cache hits, bytes in.
+export const net = { req: 0, hit: 0, bytes: 0 };
+export const netListeners = new Set();
+export function onNet(fn) { netListeners.add(fn); return () => netListeners.delete(fn); }
+function tick() { for (const fn of netListeners) fn(net); }
 
-export async function getJson(path) {
+const cache = new Map(); // url -> {etag, body, at}
+const FRESH_MS = 10_000; // younger than this, serve from cache with no request
+
+export async function apiGet(path) {
   const url = API + path;
-  const now = Date.now();
-  const hit = store.get(url);
-  if (hit && now - hit.at < FRESH_MS) return hit.body;
+  const hit = cache.get(url);
+  // A body fetched seconds ago is served straight from the cache: switching
+  // between routes does not re-hit the API at all.
+  if (hit && Date.now() - hit.at < FRESH_MS) return hit.body;
   const headers = {};
   if (hit && hit.etag) headers['If-None-Match'] = hit.etag;
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 12000);
+  net.req++;
   let res;
   try {
-    res = await fetch(url, { headers, signal: ctrl.signal });
-  } finally {
-    clearTimeout(timer);
+    res = await fetch(url, { headers });
+  } catch (e) {
+    tick();
+    throw new Error('make.fun did not answer (' + path + ')');
   }
   if (res.status === 304 && hit) {
-    hit.at = now;
+    net.hit++;
+    hit.at = Date.now();
+    tick();
     return hit.body;
   }
-  if (!res.ok) throw new Error('make.fun API ' + res.status + ' for ' + path);
+  if (!res.ok) {
+    tick();
+    throw new Error('make.fun answered ' + res.status + ' for ' + path);
+  }
   const body = await res.json();
-  store.set(url, { etag: res.headers.get('etag'), body, at: now });
+  net.bytes += JSON.stringify(body).length;
+  const etag = res.headers.get('etag');
+  if (etag) cache.set(url, { etag, body, at: Date.now() });
+  tick();
   return body;
 }
 
-export function board() {
-  return getJson('/competitions?status=open');
+// A fresh read, ignoring any cached body (used when the user hits refresh).
+export async function apiFresh(path) {
+  cache.delete(API + path);
+  return apiGet(path);
 }
 
-export function bounty(slug) {
-  return getJson('/competitions/' + encodeURIComponent(slug));
+export function cachedEtag(path) {
+  const hit = cache.get(API + path);
+  return hit ? hit.etag : null;
 }
 
-export function leaderboard(slug) {
-  return getJson('/competitions/' + encodeURIComponent(slug) + '/leaderboard');
-}
-
-export function profile(handle) {
-  return getJson('/profiles/' + encodeURIComponent(handle));
+export function cacheAgeMs(path) {
+  const hit = cache.get(API + path);
+  return hit ? Date.now() - hit.at : null;
 }
